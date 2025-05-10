@@ -51,3 +51,7 @@ body {
 #bevy {
     z-index: 2;
 }
+
+user-select {
+
+}

@@ -1,14 +1,12 @@
-use crate::{
-    GameLayer, PARTICLE_RADIUS, PARTICLE_SPAWN_SPACING, Particle, Physics, SPAWN_GRID_WIDTH,
-};
+use crate::{GameLayer, PARTICLE_RADIUS, PARTICLE_SPAWN_SPACING, Particle, SPAWN_GRID_WIDTH};
 use avian2d::collision::{Collider, CollisionLayers};
-use avian2d::prelude::{Friction, LinearVelocity, Restitution, RigidBody};
+use avian2d::prelude::{LinearVelocity, RigidBody};
 use bevy::asset::Assets;
 use bevy::color::Color;
 use bevy::core::Name;
 use bevy::prelude::{
-    Camera2d, Circle, ColorMaterial, Commands, Mesh, Mesh2d, MeshMaterial2d, Query, Rectangle, Res,
-    ResMut, Transform, Window, With,
+    Camera2d, Circle, ColorMaterial, Commands, Mesh, Mesh2d, MeshMaterial2d, Query, ResMut,
+    Transform, Window, With,
 };
 use bevy::window::PrimaryWindow;
 
@@ -17,14 +15,13 @@ pub fn setup(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
     q_windows: Query<&Window, With<PrimaryWindow>>,
-    physics_constants: Res<Physics>,
 ) {
     commands.spawn(Camera2d);
 
     let window = q_windows.single();
 
     crate::hud::spawn_hud(&mut commands, &window);
-    
+
     // ParticlesÏ
     let particle_mech = meshes.add(Circle::new(PARTICLE_RADIUS));
     let particle_material = materials.add(Color::srgb(0.2, 0.8, 1.0));

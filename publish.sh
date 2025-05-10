@@ -1,3 +1,5 @@
+#trunk build --release
+
 export APP_BUCKET="gravitygame"
 aws s3 mb s3://$APP_BUCKET           # create
 

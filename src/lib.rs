@@ -7,6 +7,9 @@ use bevy::window::PrimaryWindow;
 use std::collections::HashMap;
 use std::ops::AddAssign;
 
+use log::{info, trace, warn};
+
+
 use bevy::diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin};
 
 /// Number of particles along each axis (total = GRID^2)
@@ -14,7 +17,7 @@ const SPAWN_GRID_WIDTH: usize = 16;
 const PARTICLE_RADIUS: f32 = 2.0;
 const PARTICLE_SPAWN_SPACING: f32 = 5.0;
 
-const CURSOR_MASS: f32 = 10000.0;
+const ATTRACTOR_MASS: f32 = 10000.0;
 const PARTICLE_MASS: f32 = 1.0;
 const MAX_PARTICLE_VELOCITY: f32 = 500.0;
 
@@ -22,7 +25,7 @@ const MAX_PARTICLE_VELOCITY: f32 = 500.0;
 enum PName {
     MaxAcceleration,
     InterParticleGravity,
-    CursorGravity,
+    AttractorGravity,
 }
 
 struct PhysicsManipulable {
@@ -80,14 +83,14 @@ impl Default for Physics {
             },
         );
         map.insert(
-            PName::CursorGravity,
+            PName::AttractorGravity,
             PhysicsManipulable {
-                name: PName::CursorGravity,
+                name: PName::AttractorGravity,
                 value: 50000.0,
                 key_increase: KeyCode::KeyC,
                 key_decrease: KeyCode::KeyX,
                 delta: 1000.0,
-            }
+            },
         );
         Self(map)
     }
@@ -173,16 +176,13 @@ fn nbody_and_cursor_gravity(
     time: Res<Time>,
     q_windows: Query<&Window, With<PrimaryWindow>>,
     q_camera: Query<(&Camera, &GlobalTransform)>,
+    touches: Res<Touches>,
     physics_constants: ResMut<Physics>,
     mut q_particles: Query<(&GlobalTransform, &mut LinearVelocity), With<Particle>>,
 ) {
     let (camera, camera_transform) = q_camera.single();
 
     // Get world cursor position (if available)
-    let cursor_world = q_windows
-        .single()
-        .cursor_position()
-        .and_then(|pos| camera.viewport_to_world_2d(camera_transform, pos).ok());
 
     // Gather all particle positions
     let particle_positions: Vec<Vec2> = q_particles
@@ -214,20 +214,42 @@ fn nbody_and_cursor_gravity(
             accel += delta.normalize_or_zero() * a;
         }
 
-        // Add attraction to cursor (if present)
+        let cursor_world = q_windows
+            .single()
+            .cursor_position()
+            .and_then(|pos| camera.viewport_to_world_2d(camera_transform, pos).ok());
+
+        // handle finger positions and/or cursor positions
+        // create attraction vectors to each
+        let mut attractors: Vec<Vec2> = vec![];
         if let Some(cursor_world) = cursor_world {
-            let to_cursor = cursor_world - pos_i;
+            attractors.push(cursor_world);
+        }
+        for finger in touches.iter() {
+            attractors.push(
+                camera.viewport_to_world_2d(camera_transform, finger.position()).unwrap()
+            );
+        }
+
+        for attractor in attractors.iter() {
+            #[cfg(debug_assertions)]
+            {
+                info!("Attractor: {:?}", attractor);
+            }
+
+            let to_cursor = attractor - pos_i;
             let r2 = to_cursor.length_squared().max(1.0);
-            let a = physics_constants.get_value(PName::CursorGravity).unwrap() * CURSOR_MASS / r2;
+            let a = physics_constants
+                .get_value(PName::AttractorGravity)
+                .unwrap()
+                * ATTRACTOR_MASS
+                / r2;
             accel += to_cursor.normalize_or_zero() * a;
         }
 
         // Clamp acceleration and velocity for stability
-        accel = accel.clamp_length_max(
-            physics_constants
-                .get_value(PName::MaxAcceleration)
-                .unwrap(),
-        );
+        accel =
+            accel.clamp_length_max(physics_constants.get_value(PName::MaxAcceleration).unwrap());
 
         velocity.x += accel.x * dt;
         velocity.y += accel.y * dt;

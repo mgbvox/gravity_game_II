@@ -6,11 +6,9 @@ use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use std::collections::HashMap;
 use std::ops::AddAssign;
-
-use log::{info, trace, warn};
-
-
+// use anyhow::{Result, Error};
 use bevy::diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin};
+use bevy::render::camera::ViewportConversionError;
 
 /// Number of particles along each axis (total = GRID^2)
 const SPAWN_GRID_WIDTH: usize = 16;
@@ -125,7 +123,10 @@ enum GameLayer {
 }
 
 #[derive(Component)]
-struct Particle;
+struct Particle {
+    mesh_id: AssetId<Mesh>,
+    material_id: AssetId<ColorMaterial>,
+}
 
 pub struct GamePlugin;
 
@@ -151,7 +152,10 @@ impl Plugin for GamePlugin {
 
         #[cfg(debug_assertions)]
         {
-            app.add_plugins((FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin::default()));
+            app.add_plugins((
+                FrameTimeDiagnosticsPlugin::default(),
+                LogDiagnosticsPlugin::default(),
+            ));
         }
     }
 }
@@ -172,6 +176,15 @@ fn modify_physics_constants(
         .for_each(|(_, p)| p.handle_keys(&keys))
 }
 
+trait Attractor {}
+
+fn get_attractor_position(
+    attr: Vec2,
+    camera: (&Camera, &GlobalTransform),
+) -> Result<Vec2, ViewportConversionError> {
+    camera.0.viewport_to_world_2d(camera.1, attr)
+}
+
 fn nbody_and_cursor_gravity(
     time: Res<Time>,
     q_windows: Query<&Window, With<PrimaryWindow>>,
@@ -179,12 +192,20 @@ fn nbody_and_cursor_gravity(
     touches: Res<Touches>,
     physics_constants: ResMut<Physics>,
     mut q_particles: Query<(&GlobalTransform, &mut LinearVelocity), With<Particle>>,
-) {
-    let (camera, camera_transform) = q_camera.single();
+) -> Result<()> {
+    let camera = q_camera.single()?;
+    // handle finger positions and/or cursor positions
+    // create attraction vectors to each
+    let mut attractors: Vec<Vec2> = vec![];
+    if let Some(raw_cursor_pos) = q_windows.single()?.cursor_position() {
+        let cursor_world = get_attractor_position(raw_cursor_pos, camera)?;
+        attractors.push(cursor_world);
+    }
 
-    // Get world cursor position (if available)
+    for finger in touches.iter() {
+        attractors.push(get_attractor_position(finger.position(), camera)?);
+    }
 
-    // Gather all particle positions
     let particle_positions: Vec<Vec2> = q_particles
         .iter_mut()
         .map(|(transform, _)| transform.translation().truncate())
@@ -214,29 +235,7 @@ fn nbody_and_cursor_gravity(
             accel += delta.normalize_or_zero() * a;
         }
 
-        let cursor_world = q_windows
-            .single()
-            .cursor_position()
-            .and_then(|pos| camera.viewport_to_world_2d(camera_transform, pos).ok());
-
-        // handle finger positions and/or cursor positions
-        // create attraction vectors to each
-        let mut attractors: Vec<Vec2> = vec![];
-        if let Some(cursor_world) = cursor_world {
-            attractors.push(cursor_world);
-        }
-        for finger in touches.iter() {
-            attractors.push(
-                camera.viewport_to_world_2d(camera_transform, finger.position()).unwrap()
-            );
-        }
-
         for attractor in attractors.iter() {
-            #[cfg(debug_assertions)]
-            {
-                info!("Attractor: {:?}", attractor);
-            }
-
             let to_cursor = attractor - pos_i;
             let r2 = to_cursor.length_squared().max(1.0);
             let a = physics_constants
@@ -261,4 +260,12 @@ fn nbody_and_cursor_gravity(
         }
         i += 1;
     }
+
+    Ok(())
 }
+
+// fn update_particle_transparency(
+//     mut materials: ResMut<Assets<ColorMaterial>>,
+// ) {
+//     meshes.
+// }

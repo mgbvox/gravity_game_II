@@ -13,6 +13,7 @@ pub fn spawn_hud(commands: &mut Commands, window: &Window) {
 }
 
 pub fn update_hud(mut q_hud: Query<&mut Text, With<HUD>>, q_physics_constants: Res<Physics>) {
-    let mut hud = q_hud.single_mut();
-    q_physics_constants.update_hud(&mut hud)
+    if let Ok(mut hud) = q_hud.single_mut() {
+        q_physics_constants.update_hud(&mut hud)
+    }
 }

@@ -1,13 +1,9 @@
 use crate::{GameLayer, PARTICLE_RADIUS, PARTICLE_SPAWN_SPACING, Particle, SPAWN_GRID_WIDTH};
-use avian2d::collision::{Collider, CollisionLayers};
-use avian2d::prelude::{LinearVelocity, RigidBody};
+use avian2d::prelude::*;
 use bevy::asset::Assets;
 use bevy::color::Color;
-use bevy::core::Name;
-use bevy::prelude::{
-    Camera2d, Circle, ColorMaterial, Commands, Mesh, Mesh2d, MeshMaterial2d, Query, ResMut,
-    Transform, Window, With,
-};
+use bevy::prelude::*;
+
 use bevy::window::PrimaryWindow;
 
 pub fn setup(
@@ -18,13 +14,14 @@ pub fn setup(
 ) {
     commands.spawn(Camera2d);
 
-    let window = q_windows.single();
+    let window = q_windows.single().expect("window not found");
 
     crate::hud::spawn_hud(&mut commands, &window);
 
-    // ParticlesÏ
-    let particle_mech = meshes.add(Circle::new(PARTICLE_RADIUS));
+    // Particles
+    let particle_mesh = meshes.add(Circle::new(PARTICLE_RADIUS));
     let particle_material = materials.add(Color::srgb(0.2, 0.8, 1.0));
+
     let particle_layers = CollisionLayers::new(GameLayer::Particle, [GameLayer::Wall]);
     let x0 =
         -(SPAWN_GRID_WIDTH as f32) * PARTICLE_SPAWN_SPACING / 2.0 + PARTICLE_SPAWN_SPACING / 2.0;
@@ -35,14 +32,17 @@ pub fn setup(
             let x = x0 + i as f32 * PARTICLE_SPAWN_SPACING;
             let y = y0 + j as f32 * PARTICLE_SPAWN_SPACING;
             commands.spawn((
-                Mesh2d(particle_mech.clone().into()),
+                Mesh2d(particle_mesh.clone().into()),
                 MeshMaterial2d(particle_material.clone()),
                 Transform::from_xyz(x, y, 1.0),
                 RigidBody::Dynamic,
                 Collider::circle(PARTICLE_RADIUS),
                 particle_layers,
                 LinearVelocity::ZERO,
-                Particle,
+                Particle {
+                    mesh_id: particle_mesh.id(),
+                    material_id: particle_material.id(),
+                },
                 Name::new(format!("Particle_{i}_{j}")),
             ));
         }
